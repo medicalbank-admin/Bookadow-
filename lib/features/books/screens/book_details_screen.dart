@@ -1,25 +1,145 @@
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
 import '../controllers/book_library_controller.dart';
 import '../models/book_model.dart';
 
-class BookDetailsScreen extends StatelessWidget {
-  final String bookId;
-  final BookLibraryController controller;
-  final ValueChanged<ChapterModel>? onOpenChapter;
-
+class BookDetailsScreen extends StatefulWidget {
   const BookDetailsScreen({
     super.key,
     required this.bookId,
     required this.controller,
-    this.onOpenChapter,
+    required this.onOpenChapter,
   });
 
-  Future<String?> _showTitleDialog(
-    BuildContext context, {
-    required String heading,
-    required String initialValue,
+  final String bookId;
+  final BookLibraryController controller;
+  final ValueChanged<ChapterModel> onOpenChapter;
+
+  @override
+  State<BookDetailsScreen> createState() =>
+      _BookDetailsScreenState();
+}
+
+class _BookDetailsScreenState extends State<BookDetailsScreen> {
+  bool _isWorking = false;
+
+  BookModel? get _book => widget.controller.getBook(widget.bookId);
+
+  Future<void> _addChapter() async {
+    final title = await _showTitleDialog(
+      title: 'New Chapter',
+      hint: 'Enter chapter title',
+      actionLabel: 'Create Chapter',
+    );
+
+    if (title == null || title.trim().isEmpty) return;
+
+    setState(() => _isWorking = true);
+
+    try {
+      await widget.controller.addChapter(
+        bookId: widget.bookId,
+        title: title.trim(),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chapter created successfully.')),
+      );
+    } catch (error) {
+      _showError('Could not create chapter: $error');
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
+    }
+  }
+
+  Future<void> _renameChapter(ChapterModel chapter) async {
+    final title = await _showTitleDialog(
+      title: 'Rename Chapter',
+      hint: 'Enter new chapter title',
+      initialValue: chapter.title,
+      actionLabel: 'Save Changes',
+    );
+
+    if (title == null || title.trim().isEmpty) return;
+
+    setState(() => _isWorking = true);
+
+    try {
+      await widget.controller.updateChapter(
+        bookId: widget.bookId,
+        chapter: chapter.copyWith(title: title.trim()),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chapter renamed successfully.')),
+      );
+    } catch (error) {
+      _showError('Could not rename chapter: $error');
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
+    }
+  }
+
+  Future<void> _deleteChapter(ChapterModel chapter) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Chapter?'),
+          content: Text(
+            'Are you sure you want to delete "${chapter.title}"? '
+            'This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isWorking = true);
+
+    try {
+      await widget.controller.deleteChapter(
+        bookId: widget.bookId,
+        chapterId: chapter.id,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chapter deleted.')),
+      );
+    } catch (error) {
+      _showError('Could not delete chapter: $error');
+    } finally {
+      if (mounted) setState(() => _isWorking = false);
+    }
+  }
+
+  Future<String?> _showTitleDialog({
+    required String title,
+    required String hint,
+    required String actionLabel,
+    String initialValue = '',
   }) async {
     final textController = TextEditingController(
       text: initialValue,
@@ -29,15 +149,16 @@ class BookDetailsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text(heading),
+          title: Text(title),
           content: TextField(
             controller: textController,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Enter title',
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              hintText: hint,
             ),
             onSubmitted: (value) {
-              Navigator.pop(dialogContext, value.trim());
+              Navigator.pop(dialogContext, value);
             },
           ),
           actions: [
@@ -49,10 +170,10 @@ class BookDetailsScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.pop(
                   dialogContext,
-                  textController.text.trim(),
+                  textController.text,
                 );
               },
-              child: const Text('Save'),
+              child: Text(actionLabel),
             ),
           ],
         );
@@ -60,124 +181,51 @@ class BookDetailsScreen extends StatelessWidget {
     );
 
     textController.dispose();
-
-    if (result == null || result.isEmpty) {
-      return null;
-    }
-
     return result;
   }
 
-  Future<void> _addChapter(BuildContext context) async {
-    final title = await _showTitleDialog(
-      context,
-      heading: 'New chapter',
-      initialValue: '',
-    );
-
-    if (title == null) return;
-
+  Future<void> _reorderChapters(
+    int oldIndex,
+    int newIndex,
+  ) async {
     try {
-      controller.addChapter(
-        bookId: bookId,
-        title: title,
+      await widget.controller.reorderChapters(
+        bookId: widget.bookId,
+        oldIndex: oldIndex,
+        newIndex: newIndex,
       );
     } catch (error) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      _showError('Could not reorder chapters: $error');
     }
   }
 
-  Future<void> _renameChapter(
-    BuildContext context,
-    ChapterModel chapter,
-  ) async {
-    final title = await _showTitleDialog(
-      context,
-      heading: 'Rename chapter',
-      initialValue: chapter.title,
+  void _showError(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+      ),
     );
-
-    if (title == null) return;
-
-    try {
-      controller.updateChapter(
-        bookId: bookId,
-        chapter: chapter.copyWith(title: title),
-      );
-    } catch (error) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
-    }
-  }
-
-  Future<void> _deleteChapter(
-    BuildContext context,
-    ChapterModel chapter,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete chapter?'),
-          content: Text(
-            'Are you sure you want to delete "${chapter.title}"?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.red,
-              ),
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      controller.deleteChapter(
-        bookId: bookId,
-        chapterId: chapter.id,
-      );
-    } catch (error) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, child) {
-        final book = controller.getBook(bookId);
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        final book = _book;
 
         if (book == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Book')),
-            body: const Center(
-              child: Text('This book could not be found.'),
+            appBar: AppBar(
+              title: const Text('Book Details'),
+            ),
+            body: Center(
+              child: widget.controller.isLoading
+                  ? const CircularProgressIndicator()
+                  : const Text('Book not found.'),
             ),
           );
         }
@@ -187,212 +235,79 @@ class BookDetailsScreen extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(
-              book.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            title: const Text('Book Details'),
             actions: [
               IconButton(
                 tooltip: 'Add chapter',
-                onPressed: () => _addChapter(context),
+                onPressed: _isWorking ? null : _addChapter,
                 icon: const Icon(Icons.add),
               ),
+              const SizedBox(width: 8),
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _addChapter(context),
+            onPressed: _isWorking ? null : _addChapter,
             backgroundColor: AppTheme.navy,
             foregroundColor: Colors.white,
             icon: const Icon(Icons.add),
-            label: const Text('New chapter'),
+            label: const Text('New Chapter'),
           ),
           body: SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _BookHeader(book: book),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppTheme.navy,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.menu_book_rounded,
-                          color: AppTheme.gold,
-                          size: 30,
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          book.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (book.subtitle.isNotEmpty) ...[
-                          const SizedBox(height: 5),
-                          Text(
-                            book.subtitle,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            _BookStat(
-                              icon: Icons.list_alt,
-                              value: '${book.chapterCount}',
-                              label: 'Chapters',
-                            ),
-                            const SizedBox(width: 24),
-                            _BookStat(
-                              icon: Icons.text_fields,
-                              value: '${book.wordCount}',
-                              label: 'Words',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
                   child: Row(
                     children: [
                       const Expanded(
                         child: Text(
-                          'Your chapters',
+                          'Your Chapters',
                           style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.ink,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                       Text(
-                        '${chapters.length} total',
-                        style: const TextStyle(
-                          color: Colors.grey,
+                        '${chapters.length} chapters',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
                 Expanded(
                   child: chapters.isEmpty
-                      ? _EmptyChapters(
-                          onCreate: () => _addChapter(context),
-                        )
+                      ? _EmptyChapters(onAdd: _addChapter)
                       : ReorderableListView.builder(
                           padding: const EdgeInsets.fromLTRB(
                             16,
-                            0,
+                            4,
                             16,
                             100,
                           ),
                           itemCount: chapters.length,
-                          onReorder: (oldIndex, newIndex) {
-                            try {
-                              controller.reorderChapters(
-                                bookId: bookId,
-                                oldIndex: oldIndex,
-                                newIndex: newIndex,
-                              );
-                            } catch (error) {
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(
-                                SnackBar(
-                                  content: Text(error.toString()),
-                                ),
-                              );
-                            }
-                          },
+                          onReorder: _reorderChapters,
                           itemBuilder: (context, index) {
                             final chapter = chapters[index];
 
-                            return Card(
+                            return _ChapterTile(
                               key: ValueKey(chapter.id),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              child: ListTile(
-                                onTap: onOpenChapter == null
-                                    ? null
-                                    : () => onOpenChapter!(chapter),
-                                leading: Container(
-                                  width: 42,
-                                  height: 42,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.paper,
-                                    borderRadius:
-                                        BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.navy,
-                                    ),
-                                  ),
-                                ),
-                                title: Text(
-                                  chapter.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${chapter.wordCount} words',
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    PopupMenuButton<String>(
-                                      tooltip: 'Chapter options',
-                                      onSelected: (action) {
-                                        if (action == 'rename') {
-                                          _renameChapter(
-                                            context,
-                                            chapter,
-                                          );
-                                        } else if (action == 'delete') {
-                                          _deleteChapter(
-                                            context,
-                                            chapter,
-                                          );
-                                        }
-                                      },
-                                      itemBuilder: (context) => const [
-                                        PopupMenuItem(
-                                          value: 'rename',
-                                          child: Text('Rename'),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('Delete'),
-                                        ),
-                                      ],
-                                    ),
-                                    const Icon(
-                                      Icons.drag_handle,
-                                      color: Colors.grey,
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              chapter: chapter,
+                              number: index + 1,
+                              onOpen: () {
+                                widget.onOpenChapter(chapter);
+                              },
+                              onRename: () {
+                                _renameChapter(chapter);
+                              },
+                              onDelete: () {
+                                _deleteChapter(chapter);
+                              },
                             );
                           },
                         ),
@@ -406,23 +321,89 @@ class BookDetailsScreen extends StatelessWidget {
   }
 }
 
-class _BookStat extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
+class _BookHeader extends StatelessWidget {
+  const _BookHeader({
+    required this.book,
+  });
 
-  const _BookStat({
+  final BookModel book;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppTheme.navy,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.menu_book_rounded,
+            color: AppTheme.gold,
+            size: 32,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            book.title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (book.subtitle.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              book.subtitle,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _HeaderStat(
+                icon: Icons.article_outlined,
+                value: '${book.chapterCount}',
+                label: 'Chapters',
+              ),
+              const SizedBox(width: 24),
+              _HeaderStat(
+                icon: Icons.text_fields,
+                value: '${book.wordCount}',
+                label: 'Words',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderStat extends StatelessWidget {
+  const _HeaderStat({
     required this.icon,
     required this.value,
     required this.label,
   });
 
+  final IconData icon;
+  final String value;
+  final String label;
+
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: AppTheme.gold, size: 18),
-        const SizedBox(width: 7),
+        Icon(icon, color: AppTheme.gold, size: 19),
+        const SizedBox(width: 8),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -430,7 +411,7 @@ class _BookStat extends StatelessWidget {
               value,
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
               ),
             ),
             Text(
@@ -447,45 +428,136 @@ class _BookStat extends StatelessWidget {
   }
 }
 
-class _EmptyChapters extends StatelessWidget {
-  final VoidCallback onCreate;
-
-  const _EmptyChapters({
-    required this.onCreate,
+class _ChapterTile extends StatelessWidget {
+  const _ChapterTile({
+    super.key,
+    required this.chapter,
+    required this.number,
+    required this.onOpen,
+    required this.onRename,
+    required this.onDelete,
   });
+
+  final ChapterModel chapter;
+  final int number;
+  final VoidCallback onOpen;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        onTap: onOpen,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 8,
+        ),
+        leading: Container(
+          width: 42,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppTheme.paper,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            number.toString().padLeft(2, '0'),
+            style: const TextStyle(
+              color: AppTheme.navy,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        title: Text(
+          chapter.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          '${chapter.wordCount} words',
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 12,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.drag_handle,
+              color: Colors.grey,
+              size: 20,
+            ),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'rename') onRename();
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'rename',
+                  child: Text('Rename'),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Delete'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyChapters extends StatelessWidget {
+  const _EmptyChapters({
+    required this.onAdd,
+  });
+
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(30),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.library_books_outlined,
               size: 58,
-              color: Colors.grey,
+              color: Colors.grey.shade400,
             ),
             const SizedBox(height: 16),
             const Text(
-              'Your story starts here',
+              'Your book is waiting for its first chapter.',
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Create your first chapter and begin writing.',
+            Text(
+              'Start writing by creating your first chapter.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: onCreate,
+              onPressed: onAdd,
               icon: const Icon(Icons.add),
-              label: const Text('Create first chapter'),
+              label: const Text('Create First Chapter'),
             ),
           ],
         ),
