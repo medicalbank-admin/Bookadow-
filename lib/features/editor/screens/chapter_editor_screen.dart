@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,10 +8,6 @@ import '../../books/controllers/book_library_controller.dart';
 import '../../books/models/book_model.dart';
 
 class ChapterEditorScreen extends StatefulWidget {
-  final String bookId;
-  final ChapterModel chapter;
-  final BookLibraryController controller;
-
   const ChapterEditorScreen({
     super.key,
     required this.bookId,
@@ -20,111 +15,96 @@ class ChapterEditorScreen extends StatefulWidget {
     required this.controller,
   });
 
+  final String bookId;
+  final ChapterModel chapter;
+  final BookLibraryController controller;
+
   @override
   State<ChapterEditorScreen> createState() =>
       _ChapterEditorScreenState();
 }
 
-class _ChapterEditorScreenState
-    extends State<ChapterEditorScreen> {
-  late final TextEditingController _titleController;
+class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   late final QuillController _quillController;
 
   bool _isSaving = false;
-  bool _hasChanges = false;
+  bool _hasUnsavedChanges = false;
+  bool _isLeaving = false;
+
+  String _lastSavedContent = '';
 
   @override
   void initState() {
     super.initState();
 
-    _titleController = TextEditingController(
-      text: widget.chapter.title,
-    );
-
-    _quillController = QuillController.basic();
-
     _loadDocument();
 
-    _titleController.addListener(_markChanged);
-    _quillController.addListener(_markChanged);
+    _quillController.addListener(_onDocumentChanged);
   }
 
   void _loadDocument() {
     try {
       final decoded = jsonDecode(widget.chapter.contentJson);
 
-      _quillController.document = Document.fromJson(
+      final document = Document.fromJson(
         List<dynamic>.from(decoded as List),
       );
+
+      _quillController = QuillController(
+        document: document,
+        selection: const TextSelection.collapsed(offset: 0),
+      );
     } catch (_) {
-      // Start with a clean document if stored content is invalid.
-      _quillController.document = Document();
+      _quillController = QuillController.basic();
     }
+
+    _lastSavedContent = _currentContent;
   }
 
-  void _markChanged() {
-    if (!_hasChanges && mounted) {
+  String get _currentContent {
+    return jsonEncode(
+      _quillController.document.toDelta().toJson(),
+    );
+  }
+
+  void _onDocumentChanged() {
+    if (!mounted) return;
+
+    final changed = _currentContent != _lastSavedContent;
+
+    if (changed != _hasUnsavedChanges) {
       setState(() {
-        _hasChanges = true;
+        _hasUnsavedChanges = changed;
       });
     }
   }
 
-  String get _plainText {
-    return _quillController.document.toPlainText();
-  }
-
-  int get _wordCount {
-    final text = _plainText.trim();
-
-    if (text.isEmpty) return 0;
-
-    return text
-        .split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty)
-        .length;
-  }
-
-  int get _characterCount {
-    return _plainText.trim().length;
-  }
-
   Future<void> _saveChapter() async {
-    final title = _titleController.text.trim();
+    if (_isSaving || !_hasUnsavedChanges) return;
 
-    if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a chapter title.'),
-        ),
-      );
-      return;
-    }
+    final content = _currentContent;
 
     setState(() {
       _isSaving = true;
     });
 
     try {
-      final contentJson = jsonEncode(
-        _quillController.document.toDelta().toJson(),
-      );
-
       final updatedChapter = widget.chapter.copyWith(
-        title: title,
-        contentJson: contentJson,
+        contentJson: content,
+        updatedAt: DateTime.now(),
       );
 
-      widget.controller.updateChapter(
+      await widget.controller.updateChapter(
         bookId: widget.bookId,
         chapter: updatedChapter,
       );
 
       if (!mounted) return;
 
+      _lastSavedContent = content;
+
       setState(() {
-        _hasChanges = false;
-        _isSaving = false;
+        _hasUnsavedChanges = _currentContent != content;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,45 +116,49 @@ class _ChapterEditorScreenState
     } catch (error) {
       if (!mounted) return;
 
-      setState(() {
-        _isSaving = false;
-      });
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to save chapter: $error'),
+          backgroundColor: Colors.red.shade700,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
-  Future<bool> _confirmExit() async {
-    if (!_hasChanges) return true;
+  Future<bool> _confirmLeaving() async {
+    if (!_hasUnsavedChanges) return true;
 
-    final result = await showDialog<String>(
+    final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Unsaved changes'),
+          title: const Text('Unsaved Changes'),
           content: const Text(
-            'Would you like to save your changes before leaving?',
+            'You have changes that have not been saved. '
+            'Would you like to save before leaving?',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(dialogContext, 'stay');
+                Navigator.pop(dialogContext, false);
               },
               child: const Text('Stay'),
             ),
             TextButton(
               onPressed: () {
-                Navigator.pop(dialogContext, 'discard');
+                Navigator.pop(dialogContext, true);
               },
               child: const Text('Discard'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.pop(dialogContext, 'save');
+                Navigator.pop(dialogContext, null);
               },
               child: const Text('Save'),
             ),
@@ -183,249 +167,220 @@ class _ChapterEditorScreenState
       },
     );
 
-    if (result == 'discard') return true;
+    if (result == false) return false;
 
-    if (result == 'save') {
-      await _saveChapter();
-      return mounted && !_hasChanges;
-    }
+    if (result == true) return true;
 
-    return false;
+    await _saveChapter();
+
+    return !_hasUnsavedChanges;
+  }
+
+  Future<void> _handleBack() async {
+    if (_isLeaving || _isSaving) return;
+
+    final canLeave = await _confirmLeaving();
+
+    if (!mounted || !canLeave) return;
+
+    _isLeaving = true;
+    Navigator.of(context).pop();
   }
 
   @override
   void dispose() {
-    _titleController.removeListener(_markChanged);
-    _quillController.removeListener(_markChanged);
-
-    _titleController.dispose();
+    _quillController.removeListener(_onDocumentChanged);
     _quillController.dispose();
-
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_hasChanges,
+      canPop: !_hasUnsavedChanges && !_isSaving,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-
-        final shouldExit = await _confirmExit();
-
-        if (shouldExit && mounted) {
-          Navigator.of(context).pop();
-        }
+        await _handleBack();
       },
       child: Scaffold(
-        backgroundColor: AppTheme.paper,
         appBar: AppBar(
-          title: const Text('Writing Studio'),
+          leading: IconButton(
+            tooltip: 'Back',
+            onPressed: _handleBack,
+            icon: const Icon(Icons.arrow_back),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.chapter.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                _isSaving
+                    ? 'Saving...'
+                    : _hasUnsavedChanges
+                        ? 'Unsaved changes'
+                        : 'All changes saved',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _isSaving
+                      ? AppTheme.blue
+                      : _hasUnsavedChanges
+                          ? Colors.orange.shade700
+                          : Colors.green.shade700,
+                ),
+              ),
+            ],
+          ),
           actions: [
             IconButton(
-              tooltip: 'Save chapter',
-              onPressed: _isSaving ? null : _saveChapter,
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.save_outlined),
+              tooltip: 'Undo',
+              onPressed: _quillController.hasUndo
+                  ? _quillController.undo
+                  : null,
+              icon: const Icon(Icons.undo),
             ),
-            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Redo',
+              onPressed: _quillController.hasRedo
+                  ? _quillController.redo
+                  : null,
+              icon: const Icon(Icons.redo),
+            ),
+            IconButton(
+              tooltip: 'Save chapter',
+              onPressed: _isSaving || !_hasUnsavedChanges
+                  ? null
+                  : _saveChapter,
+              icon: const Icon(Icons.save_outlined),
+            ),
+            const SizedBox(width: 6),
           ],
         ),
         body: SafeArea(
           child: Column(
             children: [
-              _buildStatusBar(),
-              _buildFormattingToolbar(),
-              Expanded(
-                child: _buildWritingPage(),
+              Container(
+                color: Colors.white,
+                child: QuillSimpleToolbar(
+                  controller: _quillController,
+                  config: const QuillSimpleToolbarConfig(
+                    showBoldButton: true,
+                    showItalicButton: true,
+                    showUnderLineButton: true,
+                    showStrikeThrough: true,
+                    showColorButton: true,
+                    showBackgroundColorButton: true,
+                    showHeaderStyle: true,
+                    showListBullets: true,
+                    showListNumbers: true,
+                    showQuote: true,
+                    showIndent: true,
+                    showLink: true,
+                    showUndo: true,
+                    showRedo: true,
+                  ),
+                ),
               ),
-              _buildBottomBar(),
+              const Divider(height: 1),
+              Expanded(
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 18,
+                  ),
+                  child: QuillEditor.basic(
+                    controller: _quillController,
+                    config: const QuillEditorConfig(
+                      placeholder: 'Start writing your chapter...',
+                      padding: EdgeInsets.zero,
+                      expands: true,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.paper,
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.grey.shade300,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    ValueListenableBuilder(
+                      valueListenable: _quillController,
+                      builder: (context, value, child) {
+                        final text = _quillController.document
+                            .toPlainText()
+                            .trim();
+
+                        final words = text.isEmpty
+                            ? 0
+                            : text
+                                .split(RegExp(r'\s+'))
+                                .where((word) => word.isNotEmpty)
+                                .length;
+
+                        return Text(
+                          '$words words',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                        );
+                      },
+                    ),
+                    const Spacer(),
+                    if (_isSaving)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    else
+                      Icon(
+                        _hasUnsavedChanges
+                            ? Icons.edit
+                            : Icons.cloud_done_outlined,
+                        size: 16,
+                        color: _hasUnsavedChanges
+                            ? Colors.orange
+                            : Colors.green,
+                      ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isSaving
+                          ? 'Saving'
+                          : _hasUnsavedChanges
+                              ? 'Not saved'
+                              : 'Saved locally',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBar() {
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 11,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.edit_note,
-            color: AppTheme.blue,
-            size: 21,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _hasChanges
-                  ? 'Unsaved changes'
-                  : 'All changes saved',
-              style: TextStyle(
-                color: _hasChanges
-                    ? Colors.orange.shade800
-                    : Colors.green.shade700,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Text(
-            '$_wordCount words',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppTheme.ink,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFormattingToolbar() {
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 6,
-        vertical: 5,
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: QuillSimpleToolbar(
-          controller: _quillController,
-          config: const QuillSimpleToolbarConfig(
-            multiRowsDisplay: false,
-            showFontFamily: false,
-            showFontSize: true,
-            showBoldButton: true,
-            showItalicButton: true,
-            showUnderLineButton: true,
-            showStrikeThrough: true,
-            showColorButton: true,
-            showBackgroundColorButton: true,
-            showClearFormat: true,
-            showHeaderStyle: true,
-            showListNumbers: true,
-            showListBullets: true,
-            showQuote: true,
-            showIndent: true,
-            showLink: true,
-            showUndo: true,
-            showRedo: true,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWritingPage() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(
-          minHeight: 550,
-        ),
-        padding: const EdgeInsets.fromLTRB(
-          22,
-          24,
-          22,
-          35,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 15,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _titleController,
-              maxLines: 2,
-              style: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.navy,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Chapter title',
-                border: InputBorder.none,
-                filled: false,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Container(
-              height: 2,
-              width: 55,
-              color: AppTheme.gold,
-            ),
-            const SizedBox(height: 24),
-            QuillEditor.basic(
-              controller: _quillController,
-              config: const QuillEditorConfig(
-                padding: EdgeInsets.zero,
-                placeholder: 'Begin writing your chapter here...',
-                expands: false,
-                autoFocus: false,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 12,
-      ),
-      color: Colors.white,
-      child: Row(
-        children: [
-          Text(
-            '$_characterCount characters',
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
-            ),
-          ),
-          const Spacer(),
-          const Text(
-            'BOOKADOW',
-            style: TextStyle(
-              color: AppTheme.navy,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              fontSize: 11,
-            ),
-          ),
-        ],
       ),
     );
   }
