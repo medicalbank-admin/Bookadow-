@@ -18,6 +18,9 @@ dependencies:
 
   flutter_quill: ^11.4.2
 
+  sqflite: ^2.3.3+2
+  path: ^1.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
