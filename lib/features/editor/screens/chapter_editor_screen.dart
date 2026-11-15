@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import '../../../theme/app_theme.dart';
 import '../../books/controllers/book_library_controller.dart';
 import '../../books/models/book_model.dart';
+import '../services/editor_autosave_service.dart';
 
 class ChapterEditorScreen extends StatefulWidget {
   const ChapterEditorScreen({
@@ -26,6 +28,7 @@ class ChapterEditorScreen extends StatefulWidget {
 
 class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   late final QuillController _quillController;
+  late final EditorAutosaveService _autosaveService;
 
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
@@ -38,6 +41,12 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
     super.initState();
 
     _loadDocument();
+
+    _autosaveService = EditorAutosaveService(
+      onSave: () => _saveChapter(),
+      delay: const Duration(seconds: 2),
+      onError: _handleAutosaveError,
+    );
 
     _quillController.addListener(_onDocumentChanged);
   }
@@ -72,21 +81,29 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
 
     final changed = _currentContent != _lastSavedContent;
 
-    if (changed != _hasUnsavedChanges) {
-      setState(() {
-        _hasUnsavedChanges = changed;
-      });
+    setState(() {
+      _hasUnsavedChanges = changed;
+    });
+
+    if (changed) {
+      _autosaveService.schedule();
+    } else {
+      _autosaveService.cancel();
     }
   }
 
-  Future<void> _saveChapter() async {
+  Future<void> _saveChapter({
+    bool showFeedback = false,
+  }) async {
     if (_isSaving || !_hasUnsavedChanges) return;
 
     final content = _currentContent;
 
-    setState(() {
-      _isSaving = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isSaving = true;
+      });
+    }
 
     try {
       final updatedChapter = widget.chapter.copyWith(
@@ -99,29 +116,33 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
         chapter: updatedChapter,
       );
 
-      if (!mounted) return;
-
       _lastSavedContent = content;
+
+      if (!mounted) return;
 
       setState(() {
         _hasUnsavedChanges = _currentContent != content;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chapter saved successfully.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chapter saved successfully.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to save chapter: $error'),
-          backgroundColor: Colors.red.shade700,
-        ),
-      );
+      if (showFeedback && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to save chapter: $error'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      } else {
+        rethrow;
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -129,6 +150,23 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
         });
       }
     }
+  }
+
+  void _handleAutosaveError(Object error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Automatic saving failed: $error'),
+        backgroundColor: Colors.red.shade700,
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () {
+            _autosaveService.schedule();
+          },
+        ),
+      ),
+    );
   }
 
   Future<bool> _confirmLeaving() async {
@@ -171,9 +209,21 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
 
     if (result == true) return true;
 
-    await _saveChapter();
+    try {
+      await _autosaveService.saveNow();
+      return !_hasUnsavedChanges;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not save changes: $error'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
 
-    return !_hasUnsavedChanges;
+      return false;
+    }
   }
 
   Future<void> _handleBack() async {
@@ -187,8 +237,19 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
     Navigator.of(context).pop();
   }
 
+  Future<void> _manualSave() async {
+    _autosaveService.cancel();
+
+    try {
+      await _saveChapter(showFeedback: true);
+    } catch (_) {
+      // The save method already displays the error.
+    }
+  }
+
   @override
   void dispose() {
+    _autosaveService.dispose();
     _quillController.removeListener(_onDocumentChanged);
     _quillController.dispose();
     super.dispose();
@@ -225,7 +286,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                 _isSaving
                     ? 'Saving...'
                     : _hasUnsavedChanges
-                        ? 'Unsaved changes'
+                        ? 'Changes pending'
                         : 'All changes saved',
                 style: TextStyle(
                   fontSize: 11,
@@ -257,7 +318,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
               tooltip: 'Save chapter',
               onPressed: _isSaving || !_hasUnsavedChanges
                   ? null
-                  : _saveChapter,
+                  : _manualSave,
               icon: const Icon(Icons.save_outlined),
             ),
             const SizedBox(width: 6),
@@ -368,7 +429,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                       _isSaving
                           ? 'Saving'
                           : _hasUnsavedChanges
-                              ? 'Not saved'
+                              ? 'Autosave pending'
                               : 'Saved locally',
                       style: TextStyle(
                         fontSize: 12,
