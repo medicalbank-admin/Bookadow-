@@ -16,7 +16,7 @@ class BookMetadataWorkflowResult {
   bool get hasWarnings => validation.hasWarnings;
 
   double get completionPercentage =>
-      completeness.percentageValue;
+    completeness.percentageValue.toDouble();
 }
 
 class BookMetadataWorkflowService {
