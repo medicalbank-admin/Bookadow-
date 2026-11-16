@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
-import '../controllers/book_library_controller.dart';
+import '../controllers/book_liberary_controller.dart';
 import '../models/book_model.dart';
 
 class BookDetailsScreen extends StatefulWidget {
