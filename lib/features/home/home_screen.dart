@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../books/controllers/book_library_controller.dart';
+import '../../books/controllers/book_liberary_controller.dart';
 import '../../books/models/book_model.dart';
 import '../../books/screens/book_details_screen.dart';
 import '../../editor/screens/chapter_editor_screen.dart';
