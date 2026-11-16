@@ -11,10 +11,7 @@ class ExportFileService {
         await getApplicationDocumentsDirectory();
 
     final exportDirectory = Directory(
-      path.join(
-        appDirectory.path,
-        exportFolderName,
-      ),
+      path.join(appDirectory.path, exportFolderName),
     );
 
     if (!await exportDirectory.exists()) {
@@ -58,10 +55,7 @@ class ExportFileService {
 
     final file = File(filePath);
 
-    await file.writeAsBytes(
-      bytes,
-      flush: true,
-    );
+    await file.writeAsBytes(bytes, flush: true);
 
     return file;
   }
@@ -73,9 +67,7 @@ class ExportFileService {
   Future<int> getFileSize(String filePath) async {
     final file = File(filePath);
 
-    if (!await file.exists()) {
-      return 0;
-    }
+    if (!await file.exists()) return 0;
 
     return file.length();
   }
@@ -83,20 +75,18 @@ class ExportFileService {
   Future<bool> deleteFile(String filePath) async {
     final file = File(filePath);
 
-    if (!await file.exists()) {
-      return false;
-    }
+    if (!await file.exists()) return false;
 
     await file.delete();
     return true;
   }
 
-  Future<List<FileSystemEntity>> getExportedFiles() async {
+  Future<List<File>> getExportedFiles() async {
     final directory = await getExportDirectory();
 
-    final files = await directory
+    final List<File> files = await directory
         .list(followLinks: false)
-        .where((entity) => entity is File)
+        .whereType<File>()
         .toList();
 
     files.sort((a, b) {
@@ -116,20 +106,9 @@ class ExportFileService {
       '_',
     );
 
-    result = result.replaceAll(
-      RegExp(r'\s+'),
-      '_',
-    );
-
-    result = result.replaceAll(
-      RegExp(r'_+'),
-      '_',
-    );
-
-    result = result.replaceAll(
-      RegExp(r'^\.+|\.+$'),
-      '',
-    );
+    result = result.replaceAll(RegExp(r'\s+'), '_');
+    result = result.replaceAll(RegExp(r'_+'), '_');
+    result = result.replaceAll(RegExp(r'^\.+|\.+$'), '');
 
     if (result.isEmpty) {
       result = 'BOOKADOW_Book';
@@ -143,9 +122,7 @@ class ExportFileService {
   }
 
   String formatFileSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
+    if (bytes < 1024) return '$bytes B';
 
     if (bytes < 1024 * 1024) {
       return '${(bytes / 1024).toStringAsFixed(1)} KB';
