@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
@@ -89,7 +90,7 @@ class CoverPreviewWidget extends StatelessWidget {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Color(cover.titleTextColor),
+              color: Color(cover.titleColor),
               fontSize: 17,
               fontWeight: FontWeight.bold,
               fontFamily: cover.titleFontFamily,
@@ -103,9 +104,9 @@ class CoverPreviewWidget extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Color(cover.subtitleTextColor),
+                color: Color(cover.subtitleColor),
                 fontSize: 9,
-                fontFamily: cover.subtitleFontFamily,
+                fontFamily: cover.bodyFontFamily,
               ),
             ),
           ],
@@ -117,7 +118,7 @@ class CoverPreviewWidget extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Color(cover.authorTextColor),
+                color: Color(cover.authorColor),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -131,7 +132,7 @@ class CoverPreviewWidget extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Color(cover.authorTextColor),
+                color: Color(cover.authorColor),
                 fontSize: 8,
               ),
             ),
@@ -179,7 +180,8 @@ class CoverPreviewWidget extends StatelessWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Color(cover.backTextColor).withValues(alpha: 0.8),
+                color: Color(cover.backTextColor)
+                    .withValues(alpha: 0.8),
                 fontSize: 7,
               ),
             ),
