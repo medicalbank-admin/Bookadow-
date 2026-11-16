@@ -382,9 +382,9 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                 ),
                 child: Row(
                   children: [
-                    ValueListenableBuilder(
-                      valueListenable: _quillController,
-                      builder: (context, value, child) {
+                    AnimatedBuilder(
+  animation: _quillController,
+  builder: (context, child) {
                         final text = _quillController.document
                             .toPlainText()
                             .trim();
