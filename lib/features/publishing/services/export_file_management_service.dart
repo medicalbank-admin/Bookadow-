@@ -44,23 +44,14 @@ class ExportFileManagementService {
     return results;
   }
 
-  Future<List<ManagedExportFile>> searchFiles(
-    String query,
-  ) async {
-    final List<ManagedExportFile> files =
-        await getAllFiles();
+  Future<List<ManagedExportFile>> searchFiles(String query) async {
+    final List<ManagedExportFile> files = await getAllFiles();
+    final String normalizedQuery = query.trim().toLowerCase();
 
-    final String normalizedQuery =
-        query.trim().toLowerCase();
-
-    if (normalizedQuery.isEmpty) {
-      return files;
-    }
+    if (normalizedQuery.isEmpty) return files;
 
     return files.where((file) {
-      return file.name.toLowerCase().contains(
-        normalizedQuery,
-      );
+      return file.name.toLowerCase().contains(normalizedQuery);
     }).toList();
   }
 
@@ -68,9 +59,7 @@ class ExportFileManagementService {
     try {
       final File file = File(filePath);
 
-      if (!await file.exists()) {
-        return false;
-      }
+      if (!await file.exists()) return false;
 
       await file.delete();
       return true;
@@ -80,8 +69,7 @@ class ExportFileManagementService {
   }
 
   Future<int> getTotalStorageUsed() async {
-    final List<ManagedExportFile> files =
-        await getAllFiles();
+    final List<ManagedExportFile> files = await getAllFiles();
 
     return files.fold<int>(
       0,
@@ -90,33 +78,24 @@ class ExportFileManagementService {
   }
 
   Future<int> getFileCount() async {
-    final List<ManagedExportFile> files =
-        await getAllFiles();
-
+    final List<ManagedExportFile> files = await getAllFiles();
     return files.length;
   }
 
   Future<bool> deleteAllFiles() async {
-    final List<ManagedExportFile> files =
-        await getAllFiles();
-
+    final List<ManagedExportFile> files = await getAllFiles();
     bool successful = true;
 
     for (final ManagedExportFile file in files) {
       final bool deleted = await deleteFile(file.path);
-
-      if (!deleted) {
-        successful = false;
-      }
+      if (!deleted) successful = false;
     }
 
     return successful;
   }
 
   String formatStorageSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
+    if (bytes < 1024) return '$bytes B';
 
     if (bytes < 1024 * 1024) {
       return '${(bytes / 1024).toStringAsFixed(2)} KB';
