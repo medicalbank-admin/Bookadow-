@@ -16,9 +16,9 @@ class ExportWorkflowResultScreen extends StatelessWidget {
   final VoidCallback? onContinue;
 
   Future<void> _openFile(BuildContext context) async {
-    final result = await ExportFileOpenService().openExportedFile(
-      filePath: export.filePath,
-    );
+    final result = await ExportFileOpenService().openFile(
+  export.filePath,
+);
 
     if (!context.mounted) return;
 
@@ -36,7 +36,7 @@ class ExportWorkflowResultScreen extends StatelessWidget {
       await ExportSharingService().shareExportedFile(
         filePath: export.filePath,
         subject: export.fileName,
-        text: 'Created with BOOKADOW',
+        message: 'Created with BOOKADOW',
       );
     } catch (error) {
       if (!context.mounted) return;
