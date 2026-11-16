@@ -49,10 +49,9 @@ class _BookExportScreenState extends State<BookExportScreen> {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => ExportResultScreen(
-            filePath: result.filePath,
-            fileName: result.fileName,
-            onDone: () => Navigator.of(context).pop(),
-          ),
+  filePath: result.filePath,
+  fileName: result.fileName,
+),
         ),
       );
     } else {
