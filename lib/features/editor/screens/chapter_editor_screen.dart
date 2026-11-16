@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 import '../../../theme/app_theme.dart';
-import '../../books/controllers/book_library_controller.dart';
+import '../../books/controllers/book_liberary_controller.dart';
 import '../../books/models/book_model.dart';
 import '../services/editor_autosave_service.dart';
 
