@@ -90,7 +90,7 @@ class _ExportLibraryScreenState
       await _sharingService.shareExportedFile(
         filePath: file.path,
         subject: file.name,
-        text: 'Created with BOOKADOW',
+        message: 'Created with BOOKADOW',
       );
     } catch (error) {
       if (!mounted) return;
