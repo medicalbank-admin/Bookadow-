@@ -18,7 +18,7 @@ class BookMetadataCompletenessController extends ChangeNotifier {
   bool get isCalculating => _isCalculating;
 
   double get completionPercentage =>
-      _result?.percentageValue ?? 0;
+    (_result?.percentageValue ?? 0).toDouble();
 
   bool get isComplete => _result?.isComplete ?? false;
 
