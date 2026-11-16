@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../books/controllers/book_liberary_controller.dart';
-import '../../books/models/book_model.dart';
-import '../../books/screens/book_details_screen.dart';
-import '../../editor/screens/chapter_editor_screen.dart';
-import '../../books/repositories/sqlite_book_repository.dart';
-import '../../../theme/app_theme.dart';
+import '../books/controllers/book_liberary_controller.dart';
+import '../books/models/book_model.dart';
+import '../books/screens/book_details_screen.dart';
+import '../editor/screens/chapter_editor_screen.dart';
+import '../books/repositories/sqlite_book_repository.dart';
+import '../../theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
