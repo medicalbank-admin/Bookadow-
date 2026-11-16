@@ -1,3 +1,4 @@
+
 import '../models/book_layout_model.dart';
 import '../models/book_cover_model.dart';
 import 'book_export_manager.dart';
@@ -44,12 +45,14 @@ class PublishingPreflightReportBuilder {
   })  : _exportPreflightService =
             exportPreflightService ?? ExportPreflightService(),
         _readinessService =
-            readinessService ?? PublishingReadinessService();
+            readinessService ?? const PublishingReadinessService();
 
   PublishingPreflightReport buildReport({
     required String bookTitle,
     required String authorName,
     required String fileName,
+    required String extension,
+    required bool includeCover,
     required List<ExportChapter> chapters,
     required BookLayoutModel layout,
     required BookCoverModel cover,
@@ -59,15 +62,17 @@ class PublishingPreflightReportBuilder {
 
     final exportResult = _exportPreflightService.validate(
       fileName: fileName,
+      extension: extension,
       chapters: chapters,
     );
 
     final readinessResult = _readinessService.validate(
-      bookTitle: bookTitle,
+      title: bookTitle,
       authorName: authorName,
       chapters: chapters,
       layout: layout,
       cover: cover,
+      includeCover: includeCover,
     );
 
     errors.addAll(exportResult.errors);
